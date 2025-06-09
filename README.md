@@ -1,4 +1,4 @@
-# 🧠 MedScan - Backend API
+# MedScan - Backend API
 
 Ce projet est le backend de l'application **MedScan**, un système intelligent de détection de maladies dermatologiques à partir d'images, développé avec **Flask**, **TensorFlow** et **JWT Auth**.
 
@@ -111,9 +111,71 @@ Authorization: Bearer <JWT_TOKEN>
 ]
 ```
 
+## Étapes d'installation et de configuration 
+
+### Prérequis
+
+- Python 3.11 (ou compatible avec le projet)
+- `git` installé
+- Connexion Internet
+- Un terminal (CMD, PowerShell ou VS Code Terminal)
+
+### 1. Cloner le projet
+
+```bash
+git clone https://github.com/ikrameazaz/medscan-backend.git
+cd medscan-backend
+```
+
+### 2. Créer un environnement virtuel
+
+```bash
+python -m venv venv
+```
+
+### ▶3. Activer l’environnement virtuel
+
+#### Sous Windows :
+
+```bash
+.env\Scriptsctivate
+```
+
+### 4. Installer les dépendances
+
+```bash
+pip install -r requirements.txt
+```
+
+> ⚠️ Si TensorFlow échoue à s’installer, il faut utiliser une version compatible avec ton Python (ex : `tensorflow==2.15.0` pour Python 3.11)
+
+### 5. Créer un fichier `.env` à la racine avec :
+
+```env
+SECRET_KEY=ton_cle_secrete
+JWT_SECRET_KEY=ta_cle_jwt
+DATABASE_URL=sqlite:///db.sqlite3
+```
+
+Ou configure avec PostgreSQL :
+
+```env
+DATABASE_URL=postgresql://utilisateur:motdepasse@localhost:5432/medscan_db
+```
+
+### 6. Placer le modèle IA dans le bon dossier
+
+Créer un dossier `models/` à la racine si ce n’est pas déjà fait et y mettre :
+
+```
+models/dermato_model.h5
+```
+
 ---
 
-## 🧪 Tester avec Postman
+---
+
+## Tester avec Postman
 
 1. **Inscription** via `/register`
 2. **Connexion** via `/login` et récupération du token
