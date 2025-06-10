@@ -11,7 +11,7 @@ from datetime import timedelta
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)
+CORS(app) 
 bcrypt = Bcrypt(app)
 jwt = JWTManager(app)
 
@@ -31,4 +31,4 @@ from routes import *
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(debug=True)
+    app.run(debug=False)
