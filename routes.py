@@ -2,14 +2,19 @@ from flask import request, jsonify
 from app import app, db, bcrypt
 from flask_jwt_extended import create_access_token
 from models import Utilisateur, Diagnostic
-from webcam_predictor import predict_from_camera
+from PIL import Image
+import base64
+import io
 from datetime import datetime
 import random
+import numpy as np
+from flask import request, jsonify
+from tensorflow.keras.models import load_model
+from flask_jwt_extended import jwt_required
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from flask_jwt_extended import create_access_token, create_refresh_token
 from flask_mail import Mail, Message
 import os
-
 # Configuration de Flask-Mail
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
@@ -25,6 +30,7 @@ def register():
     data = request.get_json()
     nom = data['nom']
     email = data['email']
+    
 
     # Vérification si l'email existe déjà dans la base de données
     existing_user = Utilisateur.query.filter_by(email=email).first()
@@ -121,33 +127,37 @@ def forgot_password():
     except Exception as e:
         return jsonify({"erreur": f"Erreur lors de l'envoi de l'email : {str(e)}"}), 500
     
-@app.route('/reset-password/<token>', methods=['POST'])
+@app.route('/reset-password/<token>', methods=['GET', 'POST'])
 def reset_password_token(token):
     try:
-        # Vérifier et décoder le token
-        email = serializer.loads(token, salt='reset-password-salt', max_age=1800)  # 30 minutes de validité
+        email = serializer.loads(token, salt='reset-password-salt', max_age=1800)
     except Exception:
-        return jsonify({"erreur": "Lien invalide ou expiré"}), 400
+        return "Lien invalide ou expiré", 400
 
-    # Récupérer l'utilisateur à partir de l'email décodé
-    data = request.get_json()
-    new_password = data.get("nouveau_mot_de_passe")
-    confirm_password = data.get("confirmation_mot_de_passe")  # Le champ de confirmation du mot de passe
+    if request.method == 'GET':
+        return f"""
+            <form action="/reset-password/{token}" method="POST">
+                <input type="password" name="nouveau_mot_de_passe" placeholder="Nouveau mot de passe" required>
+                <input type="password" name="confirmation_mot_de_passe" placeholder="Confirmez le mot de passe" required>
+                <button type="submit">Réinitialiser</button>
+            </form>
+        """
 
-    # Vérifier si le mot de passe et la confirmation du mot de passe sont identiques
+    new_password = request.form.get("nouveau_mot_de_passe")
+    confirm_password = request.form.get("confirmation_mot_de_passe")
+
     if new_password != confirm_password:
-        return jsonify({"erreur": "Les mots de passe ne correspondent pas"}), 400
+        return "Les mots de passe ne correspondent pas", 400
 
     user = Utilisateur.query.filter_by(email=email).first()
-
     if not user:
-        return jsonify({"erreur": "Utilisateur non trouvé"}), 404
+        return "Utilisateur non trouvé", 404
 
-    # Mettre à jour le mot de passe
     user.mot_de_passe = bcrypt.generate_password_hash(new_password).decode('utf-8')
     db.session.commit()
 
-    return jsonify({"message": "Mot de passe mis à jour avec succès"}), 200
+    return "Mot de passe mis à jour avec succès ✅"
+   
 
 
 @app.route('/me', methods=['GET'])
@@ -179,24 +189,44 @@ def refresh():
 def logout():
     return jsonify({"message": "Déconnecté (client doit supprimer le token)"}), 200
 
+
+model = load_model('models/dermato_model.h5')
+classes = ['Healthy', 'Cowpox', 'Monkeypox', 'HFMD', 'Measles', 'Chickenpox']
+
 @app.route('/diagnostic', methods=['POST'])
 @jwt_required()
 def diagnostic():
-    # Démarre le thread pour exécuter la prédiction
-    prediction = predict_from_camera()
+    data = request.get_json()
+    image_base64 = data.get("image_base64")
 
-    if prediction is None:
+    if not image_base64:
+        return jsonify({"erreur": "Aucune image encodée reçue"}), 400
+
+    try:
+        # Décoder l'image depuis le base64
+        image_bytes = base64.b64decode(image_base64)
+        img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+
+        # Prétraitement
+        img = img.resize((224, 224))
+        img_array = np.expand_dims(np.array(img), axis=0) / 255.0
+
+        preds = model.predict(img_array)
+        class_probs = preds[0]
+        predicted_class = int(np.argmax(preds))
+        predicted_prob = float(np.max(preds))
+
+        label = classes[predicted_class] if predicted_prob > 0.7 else "Inconnu ou incertain"
+
         return jsonify({
-            "message": "Erreur lors de la capture de l'image ou de la prédiction."
-        }), 500
+            "message": "Diagnostic terminé",
+            "maladie": classes[predicted_class],
+            "probabilité": round(predicted_prob, 2),
+            "label": label
+        }), 200
 
-    return jsonify({
-        "message": "Diagnostic terminé",
-        "maladie": prediction["class"],
-        "probabilité": prediction["probability"],
-        "label": prediction["label"]
-    }), 200
-
+    except Exception as e:
+        return jsonify({"erreur": f"Erreur lors du diagnostic : {str(e)}"}), 500
 @app.route('/diagnosticsHistory', methods=['GET'])
 @jwt_required()
 def diagnostics_history():
